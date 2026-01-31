@@ -159,11 +159,8 @@ async function uploadPackagesAndTemplates() {
 async function uploadBinaries() {
   console.log("\n--- Sidecar binaries ---");
 
+  // ng.pt is downloaded from HuggingFace, not R2
   const binFiles = [
-    {
-      local: join(ROOT, "src-tauri/binaries/ng.pt"),
-      remote: "binaries/ng.pt",
-    },
     {
       local: join(
         ROOT,

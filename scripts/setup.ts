@@ -1,17 +1,17 @@
 /**
- * Setup script - downloads required binaries and assets from Cloudflare R2
+ * Setup script - downloads required binaries and assets
  * Run with: bun run scripts/setup.ts
  *
- * Uses wrangler CLI (requires CLOUDFLARE_API_TOKEN in .env.local)
+ * Downloads from:
+ *   - HuggingFace: NitroGen ML model (ng.pt)
+ *   - Cloudflare R2: sidecar executable, character models
  *
- * Downloads:
- *   - NitroGen ML model (ng.pt) -> src-tauri/binaries/
- *   - NitroGen sidecar executable -> src-tauri/binaries/
- *   - Character model files (.glb) -> packages/quaternius-character/
+ * R2 downloads require CLOUDFLARE_API_TOKEN in .env.local
  */
 
-import { existsSync, readFileSync, mkdirSync, statSync } from "fs";
+import { existsSync, readFileSync, mkdirSync, statSync, createWriteStream } from "fs";
 import { join, dirname } from "path";
+import { Writable } from "stream";
 
 const ROOT = join(__dirname, "..");
 const BUCKET = "kobold";
@@ -26,52 +26,57 @@ if (existsSync(envPath)) {
   });
 }
 
-if (!process.env.CLOUDFLARE_API_TOKEN) {
-  console.error(`
-Missing CLOUDFLARE_API_TOKEN in .env.local. Required:
-  CLOUDFLARE_API_TOKEN=<your-api-token>
-`);
-  process.exit(1);
-}
-
 // -------------------------------------------------------------------
 // Asset manifest
 // -------------------------------------------------------------------
 
 interface Asset {
-  remoteKey: string;
+  /** Local path relative to project root */
   localPath: string;
+  /** Human-readable description */
   description: string;
+  /** Download source: "r2" uses wrangler, "url" fetches directly */
+  source: "r2" | "url";
+  /** R2 key (when source is "r2") */
+  remoteKey?: string;
+  /** Direct URL (when source is "url") */
+  url?: string;
 }
 
 const ASSETS: Asset[] = [
   {
-    remoteKey: "binaries/ng.pt",
+    source: "url",
+    url: "https://huggingface.co/nvidia/NitroGen/resolve/main/ng.pt?download=true",
     localPath: "src-tauri/binaries/ng.pt",
     description: "NitroGen ML model (~1.9 GB)",
   },
   {
+    source: "r2",
     remoteKey: "binaries/nitrogen-sidecar-x86_64-pc-windows-msvc.exe",
     localPath:
       "src-tauri/binaries/nitrogen-sidecar-x86_64-pc-windows-msvc.exe",
     description: "NitroGen sidecar (Windows x64)",
   },
   {
+    source: "r2",
     remoteKey: "models/quaternius-character/character.glb",
     localPath: "packages/quaternius-character/character.glb",
     description: "Quaternius character model",
   },
   {
+    source: "r2",
     remoteKey: "models/quaternius-character/UAL1.glb",
     localPath: "packages/quaternius-character/Unreal-Godot/UAL1.glb",
     description: "UAL1 character model",
   },
   {
+    source: "r2",
     remoteKey: "models/quaternius-character/UAL1_Standard.glb",
     localPath: "packages/quaternius-character/Unreal-Godot/UAL1_Standard.glb",
     description: "UAL1 Standard character model",
   },
   {
+    source: "r2",
     remoteKey: "models/quaternius-character/Godot_Setup.png",
     localPath: "packages/quaternius-character/Godot_Setup.png",
     description: "Godot setup reference image",
@@ -90,19 +95,41 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-async function downloadAsset(asset: Asset): Promise<boolean> {
-  const localFull = join(ROOT, asset.localPath);
-
-  if (existsSync(localFull)) {
-    const size = statSync(localFull).size;
-    console.log(`  SKIP  ${asset.localPath} (${formatSize(size)} exists)`);
-    return true;
+async function downloadFromUrl(url: string, destPath: string): Promise<boolean> {
+  const res = await fetch(url, { redirect: "follow" });
+  if (!res.ok || !res.body) {
+    console.log(`  FAIL  HTTP ${res.status} ${res.statusText}`);
+    return false;
   }
 
-  console.log(`  GET   ${asset.remoteKey} -> ${asset.localPath}`);
+  const totalBytes = Number(res.headers.get("content-length") || 0);
+  const totalStr = totalBytes ? formatSize(totalBytes) : "unknown size";
+  let downloaded = 0;
 
-  // Ensure directory exists
-  mkdirSync(dirname(localFull), { recursive: true });
+  const file = Bun.file(destPath);
+  const writer = file.writer();
+
+  for await (const chunk of res.body) {
+    writer.write(chunk);
+    downloaded += chunk.byteLength;
+    if (totalBytes) {
+      const pct = ((downloaded / totalBytes) * 100).toFixed(1);
+      process.stdout.write(
+        `\r  ...   ${formatSize(downloaded)} / ${totalStr} (${pct}%)`
+      );
+    }
+  }
+  await writer.end();
+
+  if (totalBytes) process.stdout.write("\n");
+  return true;
+}
+
+async function downloadFromR2(remoteKey: string, destPath: string): Promise<boolean> {
+  if (!process.env.CLOUDFLARE_API_TOKEN) {
+    console.log(`  SKIP  ${remoteKey} (no CLOUDFLARE_API_TOKEN set)`);
+    return false;
+  }
 
   const proc = Bun.spawnSync(
     [
@@ -111,8 +138,8 @@ async function downloadAsset(asset: Asset): Promise<boolean> {
       "r2",
       "object",
       "get",
-      `${BUCKET}/${asset.remoteKey}`,
-      `--file=${localFull}`,
+      `${BUCKET}/${remoteKey}`,
+      `--file=${destPath}`,
       "--remote",
     ],
     {
@@ -124,20 +151,49 @@ async function downloadAsset(asset: Asset): Promise<boolean> {
   );
 
   if (proc.exitCode === 0) {
-    const size = existsSync(localFull) ? statSync(localFull).size : 0;
-    console.log(`  OK    ${asset.localPath} (${formatSize(size)})`);
     return true;
   } else {
     const stderr = proc.stderr.toString();
     if (stderr.includes("The specified key does not exist")) {
       console.log(
-        `  MISS  ${asset.remoteKey} (not found in R2 — upload first)`
+        `  MISS  ${remoteKey} (not found in R2 — upload first)`
       );
     } else {
-      console.log(`  FAIL  ${asset.remoteKey}: ${stderr.trim().split("\n").pop()}`);
+      console.log(`  FAIL  ${remoteKey}: ${stderr.trim().split("\n").pop()}`);
     }
     return false;
   }
+}
+
+async function downloadAsset(asset: Asset): Promise<boolean> {
+  const localFull = join(ROOT, asset.localPath);
+
+  if (existsSync(localFull)) {
+    const size = statSync(localFull).size;
+    console.log(`  SKIP  ${asset.localPath} (${formatSize(size)} exists)`);
+    return true;
+  }
+
+  const label = asset.source === "url" ? asset.url! : asset.remoteKey!;
+  console.log(`  GET   ${label}`);
+  console.log(`        -> ${asset.localPath}`);
+
+  // Ensure directory exists
+  mkdirSync(dirname(localFull), { recursive: true });
+
+  let success: boolean;
+  if (asset.source === "url") {
+    success = await downloadFromUrl(asset.url!, localFull);
+  } else {
+    success = await downloadFromR2(asset.remoteKey!, localFull);
+  }
+
+  if (success && existsSync(localFull)) {
+    const size = statSync(localFull).size;
+    console.log(`  OK    ${asset.localPath} (${formatSize(size)})`);
+  }
+
+  return success;
 }
 
 // -------------------------------------------------------------------
@@ -161,8 +217,8 @@ async function main() {
     console.log("  node_modules/ exists, skipping.\n");
   }
 
-  // 2. Download binary assets from R2
-  console.log("[2/3] Downloading assets from R2...");
+  // 2. Download binary assets
+  console.log("[2/3] Downloading assets...");
   let ok = 0;
   let fail = 0;
 
@@ -173,12 +229,6 @@ async function main() {
   }
 
   console.log(`\n  ${ok} downloaded/present, ${fail} missing.\n`);
-
-  if (fail > 0) {
-    console.log(
-      "  To upload missing assets, run: bun run upload:all\n"
-    );
-  }
 
   // 3. Check build prerequisites
   console.log("[3/3] Checking build prerequisites...");
