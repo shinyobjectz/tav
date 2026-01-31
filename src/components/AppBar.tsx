@@ -116,7 +116,6 @@ export function AppBar({ onSettingsClick }: AppBarProps) {
           </Button>
         </div>
       </div>
-      </div>
 
       {/* Window controls */}
       <div className="flex items-center h-full border-l border-zinc-900/50 ml-2">
