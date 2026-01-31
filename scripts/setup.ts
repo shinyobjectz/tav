@@ -2,33 +2,21 @@
  * Setup script - downloads required binaries and assets from Cloudflare R2
  * Run with: bun run scripts/setup.ts
  *
+ * Uses wrangler CLI (requires CLOUDFLARE_API_TOKEN in .env.local)
+ *
  * Downloads:
  *   - NitroGen ML model (ng.pt) -> src-tauri/binaries/
  *   - NitroGen sidecar executable -> src-tauri/binaries/
  *   - Character model files (.glb) -> packages/quaternius-character/
  */
 
-import {
-  S3Client,
-  GetObjectCommand,
-  HeadObjectCommand,
-} from "@aws-sdk/client-s3";
-import {
-  readFileSync,
-  existsSync,
-  mkdirSync,
-  writeFileSync,
-  statSync,
-} from "fs";
-import { join } from "path";
-import { Readable } from "stream";
-
-// -------------------------------------------------------------------
-// Config
-// -------------------------------------------------------------------
+import { existsSync, readFileSync, mkdirSync, statSync } from "fs";
+import { join, dirname } from "path";
 
 const ROOT = join(__dirname, "..");
+const BUCKET = "kobold";
 
+// Load .env.local
 const envPath = join(ROOT, ".env.local");
 if (existsSync(envPath)) {
   const env = readFileSync(envPath, "utf-8");
@@ -38,44 +26,22 @@ if (existsSync(envPath)) {
   });
 }
 
-const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
-const ACCESS_KEY_ID = process.env.CLOUDFLARE_ACCESS_KEY_ID;
-const SECRET_ACCESS_KEY = process.env.CLOUDFLARE_SECRET_ACCESS_KEY;
-const BUCKET = process.env.CLOUDFLARE_BUCKET || "kobold";
-
-if (!ACCOUNT_ID || !ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
+if (!process.env.CLOUDFLARE_API_TOKEN) {
   console.error(`
-Missing R2 credentials in .env.local. Required:
-  CLOUDFLARE_ACCOUNT_ID=<your-account-id>
-  CLOUDFLARE_ACCESS_KEY_ID=<r2-access-key-id>
-  CLOUDFLARE_SECRET_ACCESS_KEY=<r2-secret-access-key>
-  CLOUDFLARE_BUCKET=kobold
+Missing CLOUDFLARE_API_TOKEN in .env.local. Required:
+  CLOUDFLARE_API_TOKEN=<your-api-token>
 `);
   process.exit(1);
 }
 
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: `https://${ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: ACCESS_KEY_ID,
-    secretAccessKey: SECRET_ACCESS_KEY,
-  },
-});
-
 // -------------------------------------------------------------------
-// Manifest of files to download
+// Asset manifest
 // -------------------------------------------------------------------
 
 interface Asset {
-  /** Key in the R2 bucket */
   remoteKey: string;
-  /** Local path relative to project root */
   localPath: string;
-  /** Human-readable description */
   description: string;
-  /** If true, skip when file already exists locally */
-  skipIfExists?: boolean;
 }
 
 const ASSETS: Asset[] = [
@@ -83,38 +49,32 @@ const ASSETS: Asset[] = [
     remoteKey: "binaries/ng.pt",
     localPath: "src-tauri/binaries/ng.pt",
     description: "NitroGen ML model (~1.9 GB)",
-    skipIfExists: true,
   },
   {
     remoteKey: "binaries/nitrogen-sidecar-x86_64-pc-windows-msvc.exe",
     localPath:
       "src-tauri/binaries/nitrogen-sidecar-x86_64-pc-windows-msvc.exe",
     description: "NitroGen sidecar (Windows x64)",
-    skipIfExists: true,
   },
   {
     remoteKey: "models/quaternius-character/character.glb",
     localPath: "packages/quaternius-character/character.glb",
     description: "Quaternius character model",
-    skipIfExists: true,
   },
   {
     remoteKey: "models/quaternius-character/UAL1.glb",
     localPath: "packages/quaternius-character/Unreal-Godot/UAL1.glb",
     description: "UAL1 character model",
-    skipIfExists: true,
   },
   {
     remoteKey: "models/quaternius-character/UAL1_Standard.glb",
     localPath: "packages/quaternius-character/Unreal-Godot/UAL1_Standard.glb",
     description: "UAL1 Standard character model",
-    skipIfExists: true,
   },
   {
     remoteKey: "models/quaternius-character/Godot_Setup.png",
     localPath: "packages/quaternius-character/Godot_Setup.png",
     description: "Godot setup reference image",
-    skipIfExists: true,
   },
 ];
 
@@ -130,54 +90,54 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-async function streamToBuffer(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
 async function downloadAsset(asset: Asset): Promise<boolean> {
   const localFull = join(ROOT, asset.localPath);
 
-  // Skip if already present
-  if (asset.skipIfExists && existsSync(localFull)) {
+  if (existsSync(localFull)) {
     const size = statSync(localFull).size;
     console.log(`  SKIP  ${asset.localPath} (${formatSize(size)} exists)`);
     return true;
   }
 
-  // Check remote exists
-  let remoteSize = 0;
-  try {
-    const head = await s3.send(
-      new HeadObjectCommand({ Bucket: BUCKET, Key: asset.remoteKey })
-    );
-    remoteSize = head.ContentLength ?? 0;
-  } catch {
-    console.log(`  MISS  ${asset.remoteKey} (not found in R2 — upload first)`);
-    return false;
-  }
-
-  console.log(
-    `  GET   ${asset.remoteKey} (${formatSize(remoteSize)}) -> ${asset.localPath}`
-  );
+  console.log(`  GET   ${asset.remoteKey} -> ${asset.localPath}`);
 
   // Ensure directory exists
-  const dir = join(localFull, "..");
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dirname(localFull), { recursive: true });
 
-  // Download
-  const resp = await s3.send(
-    new GetObjectCommand({ Bucket: BUCKET, Key: asset.remoteKey })
+  const proc = Bun.spawnSync(
+    [
+      "npx",
+      "wrangler",
+      "r2",
+      "object",
+      "get",
+      `${BUCKET}/${asset.remoteKey}`,
+      `--file=${localFull}`,
+      "--remote",
+    ],
+    {
+      cwd: ROOT,
+      env: { ...process.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    }
   );
-  const body = resp.Body as Readable;
-  const buffer = await streamToBuffer(body);
-  writeFileSync(localFull, buffer);
 
-  console.log(`  OK    ${asset.localPath} (${formatSize(buffer.length)})`);
-  return true;
+  if (proc.exitCode === 0) {
+    const size = existsSync(localFull) ? statSync(localFull).size : 0;
+    console.log(`  OK    ${asset.localPath} (${formatSize(size)})`);
+    return true;
+  } else {
+    const stderr = proc.stderr.toString();
+    if (stderr.includes("The specified key does not exist")) {
+      console.log(
+        `  MISS  ${asset.remoteKey} (not found in R2 — upload first)`
+      );
+    } else {
+      console.log(`  FAIL  ${asset.remoteKey}: ${stderr.trim().split("\n").pop()}`);
+    }
+    return false;
+  }
 }
 
 // -------------------------------------------------------------------
@@ -203,53 +163,41 @@ async function main() {
 
   // 2. Download binary assets from R2
   console.log("[2/3] Downloading assets from R2...");
-  let downloaded = 0;
-  let skipped = 0;
-  let missing = 0;
+  let ok = 0;
+  let fail = 0;
 
   for (const asset of ASSETS) {
-    const ok = await downloadAsset(asset);
-    if (ok) {
-      if (
-        asset.skipIfExists &&
-        existsSync(join(ROOT, asset.localPath))
-      ) {
-        // Could be skip or fresh download — count based on log
-      }
-      downloaded++;
-    } else {
-      missing++;
-    }
+    const success = await downloadAsset(asset);
+    if (success) ok++;
+    else fail++;
   }
 
-  console.log(
-    `\n  ${downloaded} downloaded/present, ${missing} missing from R2.\n`
-  );
+  console.log(`\n  ${ok} downloaded/present, ${fail} missing.\n`);
 
-  if (missing > 0) {
+  if (fail > 0) {
     console.log(
-      "  To upload missing assets, run: bun run scripts/upload-to-r2.ts --binaries\n"
+      "  To upload missing assets, run: bun run upload:all\n"
     );
   }
 
-  // 3. Summary
+  // 3. Check build prerequisites
   console.log("[3/3] Checking build prerequisites...");
   const checks = [
     {
       name: "Rust toolchain",
-      cmd: "rustc --version",
+      cmd: ["rustc", "--version"],
       hint: "Install from https://rustup.rs",
     },
     {
       name: "Tauri CLI",
-      cmd: "npx tauri --version",
+      cmd: ["npx", "tauri", "--version"],
       hint: "Run: bun add -D @tauri-apps/cli",
     },
   ];
 
   for (const check of checks) {
     try {
-      const proc = Bun.spawnSync(check.cmd.split(" "), {
+      const proc = Bun.spawnSync(check.cmd, {
         cwd: ROOT,
         stdout: "pipe",
         stderr: "pipe",
