@@ -1,0 +1,135 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://assets/entities/player/player.gd" id="1"]
+[ext_resource type="Script" path="res://src/components/health_component.gd" id="2"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.35
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.35, 0.38, 0.4, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.55, 0.5, 0.45, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_ramp"]
+albedo_color = Color(0.85, 0.55, 0.25, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_platform"]
+albedo_color = Color(0.3, 0.55, 0.75, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_barrier"]
+albedo_color = Color(0.7, 0.3, 0.3, 1)
+
+[node name="Main" type="Node3D"]
+
+[node name="Player" type="CharacterBody3D" parent="." groups=["player"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 1, 15)
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Model" type="Node3D" parent="Player"]
+
+[node name="HealthComponent" type="Node" parent="Player"]
+script = ExtResource("2")
+
+[node name="CameraPivot" type="Node3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+
+[node name="SpringArm3D" type="SpringArm3D" parent="Player/CameraPivot"]
+spring_length = 5.0
+margin = 0.3
+
+[node name="Camera3D" type="Camera3D" parent="Player/CameraPivot/SpringArm3D"]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 20, 30, 20)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="WallNorth" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, -40)
+use_collision = true
+size = Vector3(80, 6, 1)
+material = SubResource("Mat_wall")
+
+[node name="WallSouth" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 40)
+use_collision = true
+size = Vector3(80, 6, 1)
+material = SubResource("Mat_wall")
+
+[node name="WallEast" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 3, 0)
+use_collision = true
+size = Vector3(1, 6, 80)
+material = SubResource("Mat_wall")
+
+[node name="WallWest" type="CSGBox3D" parent="Environment"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 3, 0)
+use_collision = true
+size = Vector3(1, 6, 80)
+material = SubResource("Mat_wall")
+
+[node name="Obstacles" type="Node3D" parent="Environment"]
+
+[node name="PlatformLow" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.75, 10)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/PlatformLow"]
+use_collision = true
+size = Vector3(6, 1.5, 6)
+material = SubResource("Mat_platform")
+
+[node name="PlatformMid" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 1.25, -10)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/PlatformMid"]
+use_collision = true
+size = Vector3(5, 2.5, 5)
+material = SubResource("Mat_platform")
+
+[node name="PlatformHigh" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 2, -15)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/PlatformHigh"]
+use_collision = true
+size = Vector3(4, 4, 4)
+material = SubResource("Mat_platform")
+
+[node name="CenterPlatform" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/CenterPlatform"]
+use_collision = true
+size = Vector3(8, 2, 8)
+material = SubResource("Mat_platform")
+
+[node name="Ramp" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(0.985, 0.174, 0, -0.174, 0.985, 0, 0, 0, 1, 20, 1, -20)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/Ramp"]
+use_collision = true
+size = Vector3(8, 0.5, 6)
+material = SubResource("Mat_ramp")
+
+[node name="Barrier1" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.6, 0)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/Barrier1"]
+use_collision = true
+size = Vector3(4, 1.2, 0.5)
+material = SubResource("Mat_barrier")
+
+[node name="Barrier2" type="StaticBody3D" parent="Environment/Obstacles"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0.6, 5)
+[node name="Mesh" type="CSGBox3D" parent="Environment/Obstacles/Barrier2"]
+use_collision = true
+size = Vector3(5, 1.2, 0.5)
+material = SubResource("Mat_barrier")
+
+[node name="FloorMesh" type="CSGBox3D" parent="Environment"]
+use_collision = true
+size = Vector3(80, 0.2, 80)
+material = SubResource("Mat_floor")

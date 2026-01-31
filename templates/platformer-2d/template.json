@@ -1,0 +1,21 @@
+{
+  "name": "2D Platformer",
+  "id": "platformer",
+  "version": "1.0.0",
+  "dimension": "2d",
+  "description": "Side-scrolling platformer with gravity and jump mechanics",
+  "features": [
+    "Gravity-based movement",
+    "Jump with variable height",
+    "Health component",
+    "Camera follow"
+  ],
+  "packages": {},
+  "components": ["health_component", "movement_component_2d"],
+  "controls": {
+    "move": {"type": "direction", "values": ["left", "right"], "description": "Move player horizontally"},
+    "jump": {"type": "action", "description": "Jump (when grounded, hold for higher)"},
+    "attack": {"type": "action", "description": "Attack"},
+    "stop": {"type": "action", "description": "Stop all movement"}
+  }
+}

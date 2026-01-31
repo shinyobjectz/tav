@@ -1,0 +1,22 @@
+{
+  "name": "2D Top-Down",
+  "id": "top-down",
+  "version": "1.0.0",
+  "dimension": "2d",
+  "description": "Top-down movement for RPG or adventure games",
+  "features": [
+    "8-directional movement",
+    "No gravity",
+    "Health component",
+    "Interact action"
+  ],
+  "packages": {},
+  "components": ["health_component"],
+  "controls": {
+    "move": {"type": "direction", "values": ["left", "right", "up", "down"], "description": "Move player in direction"},
+    "sprint": {"type": "hold", "description": "Run faster"},
+    "attack": {"type": "action", "description": "Attack"},
+    "interact": {"type": "action", "description": "Interact with nearby object"},
+    "stop": {"type": "action", "description": "Stop all movement"}
+  }
+}

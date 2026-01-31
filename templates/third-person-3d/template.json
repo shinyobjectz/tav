@@ -1,0 +1,33 @@
+{
+  "name": "Third Person 3D",
+  "id": "third-person",
+  "version": "1.0.0",
+  "dimension": "3d",
+  "description": "Standalone third-person controller with mouse-look camera, sprint, and jump.",
+  "features": [
+    "Mouse-look orbit camera",
+    "WASD movement with sprint",
+    "Jump with gravity",
+    "Model rotation to face movement",
+    "Health component integration"
+  ],
+  "packages": {
+    "required": [],
+    "recommended": ["quaternius-ual"]
+  },
+  "controls": {
+    "move_left": {"type": "direction", "description": "Strafe left"},
+    "move_right": {"type": "direction", "description": "Strafe right"},
+    "move_up": {"type": "direction", "description": "Move forward"},
+    "move_down": {"type": "direction", "description": "Move backward"},
+    "jump": {"type": "action", "description": "Jump"},
+    "sprint": {"type": "hold", "description": "Sprint while moving"}
+  },
+  "optional_addon": {
+    "name": "AMSG",
+    "description": "For advanced features: mantle, crouch, 1st/3rd person toggle, pose warping",
+    "path": "packages/amsg/addons/AMSG",
+    "source": "https://github.com/ywmaa/Advanced-Movement-System-Godot",
+    "license": "MIT"
+  }
+}

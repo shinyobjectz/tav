@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Tauri
+src-tauri/target/
+
+# Sidecar binaries & ML models (downloaded via setup script)
+src-tauri/binaries/*.exe
+src-tauri/binaries/*.pt
+src-tauri/binaries/build/
+
+# Godot
+.godot/
+*.translation
+*.tscn.converted
+*.tres.converted
+
+# Test projects / sandboxes
+test/
+!test/README.md
+
+# Packages - downloadable assets from R2 (only keep README)
+packages/**/assets/
+packages/**/*.zip
+packages/**/*.glb
+packages/**/*.png
+!packages/**/README.md
+
+# Wrangler local storage
+.wrangler/
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.temp
+.download_temp.*

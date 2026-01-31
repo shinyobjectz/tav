@@ -1,0 +1,25 @@
+{
+  "name": "First Person 3D",
+  "id": "first-person",
+  "version": "1.0.0",
+  "dimension": "3d",
+  "description": "First-person controller with mouse look and basic movement",
+  "features": [
+    "Mouse look camera",
+    "WASD movement",
+    "Jump with gravity",
+    "Health component"
+  ],
+  "packages": {},
+  "components": ["health_component"],
+  "controls": {
+    "move": {"type": "direction", "values": ["left", "right", "up", "down"], "description": "Move player in direction"},
+    "jump": {"type": "action", "description": "Jump (when grounded)"},
+    "sprint": {"type": "hold", "description": "Sprint while moving"},
+    "crouch": {"type": "hold", "description": "Crouch"},
+    "attack": {"type": "action", "description": "Attack/shoot"},
+    "interact": {"type": "action", "description": "Interact with nearby object"},
+    "look": {"type": "vector2", "description": "Camera look direction (x, y degrees)"},
+    "stop": {"type": "action", "description": "Stop all movement"}
+  }
+}
